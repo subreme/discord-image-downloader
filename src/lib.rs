@@ -175,7 +175,7 @@ pub mod run {
         for i in 0..res.len() {
             for j in 0..res[i].attachments.len() {
                 let att = &res[i].attachments[j];
-                if !att.width.is_none() {
+                if images < selected.quantity || selected.quantity == 0 && !att.width.is_none() {
                     save(&att.url, path);
                     images += 1;
                 }
