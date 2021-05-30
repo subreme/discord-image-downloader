@@ -59,7 +59,7 @@ pub mod config {
             if input.is_empty() || input.to_lowercase() == "default" {
                 break 0;
             } else {
-                let date: Vec<&str> = input.split("/").collect();
+                let date: Vec<&str> = input.split('/').collect();
                 if input.len() == 8 && date.len() == 3 {
                     let day: u32 = match date[0].parse() {
                         Ok(num) => num,
@@ -163,19 +163,18 @@ pub mod config {
 pub mod run {
     use super::*;
 
-    use reqwest;
     use serenity::model::channel::Message;
     use std::{fs::write, path::Path};
 
     pub fn all(selected: config::Config) {
-        println!("");
+        println!();
         let res: Vec<Message> = get(&selected);
         let path = Path::new(&selected.path);
         let mut images: u32 = 0;
-        for i in 0..res.len() {
-            for j in 0..res[i].attachments.len() {
-                let att = &res[i].attachments[j];
-                if images < selected.quantity || selected.quantity == 0 && !att.width.is_none() {
+        for msg in res {
+            for j in 0..msg.attachments.len() {
+                let att = &msg.attachments[j];
+                if images < selected.quantity || selected.quantity == 0 && att.width.is_some() {
                     save(&att.url, path);
                     images += 1;
                 }
@@ -207,9 +206,9 @@ pub mod run {
 
     #[tokio::main]
     async fn save(url: &String, path: &Path) {
-        let name = url.split("/").nth(5).expect("Failed to get image name!");
+        let name = url.split('/').nth(5).expect("Failed to get image name!");
         let ext = url
-            .split(".")
+            .split('.')
             .last()
             .expect("Failed to get image filetype!");
         let path = path.join(format!("{}.{}", name, ext));
