@@ -306,7 +306,6 @@ pub mod run {
         println!("\nSuccessfully saved {} images!", images);
     }
 
-    #[tokio::main]
     async fn get(selected: &config::Config) -> Vec<Message> {
         // The API is extremely simple, as shown below
         let mut url = format!(
@@ -336,7 +335,6 @@ pub mod run {
             .expect("Failed to parse Response!")
     }
 
-    #[tokio::main]
     async fn save(url: &String, path: &Path) {
         // Although the Message ID is specified in the `Message` `struct`, it's
         // easier to extract it from the Image URL
