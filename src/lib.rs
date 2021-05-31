@@ -255,7 +255,7 @@ pub mod run {
     use super::*;
 
     use serenity::model::channel::Message;
-    use std::{fs::write, path::Path};
+    use std::{collections::HashMap, fs::write, path::Path};
 
     // Jut like in the `config` module, the `all()` function calls its own
     // functions and handles the whole task. I could have simply written two
@@ -268,55 +268,99 @@ pub mod run {
         // for Sneaker Twitter Designers, after all)
         println!();
 
-        // After getting migraines due to my completely unnecessary efforts to
-        // serialize Discord's Message API JSON responses, I decided to simply
-        // use the ones defined in the `serenity` crate, importing their
-        // `Message` struct (and making me cry for wasting so much time)
-        let res: Vec<Message> = get(&selected);
-
         // Since the path was saved as a String, as I explained earlier, the
         // real path has to be created here
         let path = Path::new(&selected.path);
 
-        // This counter is used to keep track of the number of images downloaded
-        // and make sure they don't exceed the specified limit
-        let mut images: u32 = 0;
+        // This `HashMap` is used to keep track of the number of images
+        // downloaded and make sure they don't exceed the specified limit, while
+        // also keeping track of the amount of times each one is downloaded,
+        // ensuring that images aren't downloaded more than once
+        let mut images: HashMap<String, u32> = HashMap::new();
 
-        // Since the API's response is simply an array of messages, I iterate
-        // through each one
-        for msg in res {
-            // The program only continues if the image limit hasn't been reached
-            if images < selected.quantity || selected.quantity == 0 {
-                // Not all messages have attatchments, but not all attatchments are
-                // images either, so each one must be checked
-                for att in msg.attachments {
-                    // This checks that the attatchment is an image by checking
-                    // if a `width` property is specified
-                    if att.width.is_some() {
-                        // If it is, the image's url is accessed and the file is
-                        // saved using the `save()` function, defined below
-                        save(&att.url, path);
-                        images += 1;
+        // `after` is initialized as the Start Date, as all images should have
+        // be sent after it
+        let mut after = selected.date;
+
+        loop {
+            // After getting migraines due to my completely unnecessary efforts to
+            // serialize Discord's Message API JSON responses, I decided to simply
+            // use the ones defined in the `serenity` crate, importing their
+            // `Message` struct (and making me cry for wasting so much time)
+            let res: Vec<Message> = get(&selected, after);
+
+            // Once all messages are requested, there will be no new ones and
+            // the program will be done
+            if res.is_empty() {
+                break;
+            } else {
+                // The first message returned by the API is the most recent one,
+                // so after is updated to ts ID so that the next requests only
+                // includes messages sent after it
+                after = format!("{}", res.first().expect("Failed to find last message!").id)
+                    .parse()
+                    .expect("Failed to parse Message ID!");
+
+                // Since the API's response is simply an array of messages, I iterate
+                // through each one
+                for msg in res {
+                    // I immediately extract the Message ID so that I can check
+                    // if the image has been downloaded already
+                    let id = format!("{}", msg.id);
+
+                    // The program only continues if the image limit hasn't been
+                    // reached and the image hasn't been previously downloaded
+                    if images.len() > selected.quantity as usize
+                        || selected.quantity != 0 && images.contains_key(id.as_str())
+                    {
+                        break;
+                    } else {
+                        // Not all messages have attatchments, but not all attatchments are
+                        // images either, so each one must be checked
+                        for att in msg.attachments {
+                            // This checks that the attatchment is an image by checking
+                            // if a `width` property is specified
+                            if att.width.is_some() {
+                                // If it is, the image's url is accessed and the file is
+                                // saved using the `save()` function, defined below
+                                let url = att.url.to_string();
+                                save(&url, path);
+
+                                // The image's Message ID is added to `images`
+                                // if it isn't part of it already
+                                /*
+                                let count =
+                                */
+                                images.entry(format!("{}", msg.id)).or_insert(0);
+
+                                // The number of downloads could be checked in
+                                // the future to verify if an image has indeed
+                                // only been saved once, however that
+                                // functionality hasn't been implemented yet
+                                /*
+                                 *count += 1;
+                                 */
+                            }
+                        }
                     }
                 }
             }
         }
 
-        // Once all images have been downloaded, the number is dispayed
-        println!("\nSuccessfully saved {} images!", images);
+        // Once all images have been downloaded, the number found is dispayed
+        println!("\nSuccessfully saved {} images!", images.len());
     }
 
-    async fn get(selected: &config::Config) -> Vec<Message> {
+    #[tokio::main]
+    async fn get(selected: &config::Config, after: u64) -> Vec<Message> {
         // The API is extremely simple, as shown below
         let mut url = format!(
-            "https://discordapp.com/api/channels/{}/messages",
+            "https://discordapp.com/api/channels/{}/messages?limit=100",
             selected.channel
         );
 
-        // If a start date was specified, it's included in the URL to only ask
-        // Discord for the messages sent after it
-        if selected.date > 0 {
-            url.push_str(format!("?after={}", selected.date).as_str());
+        if after > 0 {
+            url = format!("{}&after={}", url, after);
         }
 
         // The authorization in the API is as basic as adding a header with the
@@ -335,6 +379,7 @@ pub mod run {
             .expect("Failed to parse Response!")
     }
 
+    #[tokio::main]
     async fn save(url: &String, path: &Path) {
         // Although the Message ID is specified in the `Message` `struct`, it's
         // easier to extract it from the Image URL
