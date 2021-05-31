@@ -332,7 +332,7 @@ pub mod run {
                             if att.width.is_some() {
                                 // If it is, the image's url is accessed and the file is
                                 // saved using the `save()` function, defined below
-                                let url = att.url.to_string();
+                                let url = att.url;
                                 save(&url, path);
 
                                 // The image's Message ID is added to `images`
@@ -389,7 +389,7 @@ pub mod run {
     }
 
     #[tokio::main]
-    async fn save(url: &String, path: &Path) {
+    async fn save(url: &str, path: &Path) {
         // Although the Message ID is specified in the `Message` `struct`, it's
         // easier to extract it from the Image URL
         let name = url.split('/').nth(5).expect("Failed to get image name!");
