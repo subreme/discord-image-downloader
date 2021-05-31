@@ -95,7 +95,7 @@ pub mod config {
 
                 // Checking the length of the input and making sure that it
                 // contains two slashes works well enough to validate the date
-                if input.len() == 8 && date.len() == 3 {
+                if date.len() == 3 && input.len() == 8 | 10 {
                     let day: u32 = match date[0].parse() {
                         Ok(num) => {
                             // No month has less than 1 day or more than 31, but
@@ -135,9 +135,18 @@ pub mod config {
                             continue;
                         }
                     };
-                    let year: i32 = match format!("20{}", date[2]).parse() {
+
+                    // This check allows the program to support the
+                    // `DD/MM/YYYY`datr format as well as `DD/MM/YY`
+                    let year = if input.len() == 8 {
+                        format!("20{}", date[2]).parse()
+                    } else {
+                        date[2].parse()
+                    };
+
+                    let year: i32 = match year {
                         Ok(num) => {
-                            if num > 2015 {
+                            if num > 2014 {
                                 num
                             } else {
                                 println!("\nDiscord didn't even exist at the time!");
