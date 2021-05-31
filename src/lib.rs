@@ -3,14 +3,18 @@ use chrono::prelude::*;
 pub mod config {
     use super::*;
 
+    use reqwest::Response;
     use std::{env::current_dir, fs, io};
 
     // This collects the config data, calling all config functions
-    pub fn all() -> Config {
+    pub async fn all() -> Config {
+        let token = token().await;
         // The `Config` `struct` is defined at the end of the module
         Config {
-            token: token(),
-            channel: channel(),
+            // `token`'s value must be cloned as `Config.token` expects a
+            // `String`, but it needs to be borrowed by `channel()` later
+            token: token.to_owned(),
+            channel: channel(&token).await,
             date: date(),
             quantity: quantity(),
             path: path(),
@@ -33,37 +37,49 @@ pub mod config {
         choice.trim().to_string()
     }
 
-    fn token() -> String {
+    // This function allows `token()` and `channel()` to use Discord-s API to
+    // check if their value is valid
+    async fn api(token: &String, path: &str) -> Response {
+        reqwest::Client::new()
+            .get(format!("https://discordapp.com/api/{}", path))
+            .header("Authorization", format!("Bot {}", token))
+            .send()
+            .await
+            .expect("Request Failed!")
+    }
+
+    async fn token() -> String {
         loop {
             let input = input("What's your bot's token?");
 
-            // Bot Tokens are definitely longer than 10 characters, so this will
-            // be a sloppy validation before I implement an actual check of the
-            // access token being real
-            if input.len() > 10 {
+            // If the response's status is "OK", the Bot Token is valid,
+            // otherwise it's not, and the user is prompted again
+            if api(&input, "gateway/bot").await.status() == 200 {
                 break input;
             } else {
-                println!("\nNo bot token is that short!");
+                println!("\nInvalid Bot Token!");
                 continue;
             }
         }
     }
 
-    fn channel() -> String {
+    async fn channel(token: &String) -> String {
         loop {
             let input = input("What channel are the images in?");
 
-            // All Channel IDs are Snowflakes, so they should be able to parse
-            // to an integer if they are valid
-            match input.parse::<u64>() {
-                // They are then saved as `String`s anyway, as there's no need
-                // for them to be `u64`s if they're simply part of a URL
-                Ok(_) => break input,
-                Err(_) => {
-                    println!("\nInvalid input!");
-                    println!("Discord Channel IDs only contain numerical characters.");
-                    continue;
-                }
+            // If the response's status is "OK", the Channel ID is valid and can
+            // be accessed using the inputted Bot Token, and if it's not, the
+            // user is prompted again
+            if api(token, format!("channels/{}", input).as_str())
+                .await
+                .status()
+                == 200
+            {
+                break input;
+            } else {
+                println!("\nInvalid Channel ID!");
+                println!("The bot can't access this channel!");
+                continue;
             }
         }
     }
@@ -264,14 +280,14 @@ pub mod run {
     use super::*;
 
     use serenity::model::channel::Message;
-    use std::{collections::HashMap, fs::write, path::Path};
+    use std::{collections::HashMap, fs::write, /*io::stdin,*/ path::Path, /*process::exit*/};
 
     // Jut like in the `config` module, the `all()` function calls its own
     // functions and handles the whole task. I could have simply written two
     // functions, `config()` and `run()`, outside of modules, but I only
     // intended for them to be used, and as far as I know hey wouldn't be able
     // to use private functions from the modules otherwise
-    pub fn all(selected: config::Config) {
+    pub async fn all(selected: config::Config) {
         // This prints an empty sline to separate he download messages from the
         // user's last input, once again for cosmetic reasons (this is a tool
         // for Sneaker Twitter Designers, after all)
@@ -333,7 +349,7 @@ pub mod run {
                                 // If it is, the image's url is accessed and the file is
                                 // saved using the `save()` function, defined below
                                 let url = att.url;
-                                save(&url, path);
+                                save(&url, path).await;
 
                                 // The image's Message ID is added to `images`
                                 // if it isn't part of it already
@@ -388,7 +404,6 @@ pub mod run {
             .expect("Failed to parse Response!")
     }
 
-    #[tokio::main]
     async fn save(url: &str, path: &Path) {
         // Although the Message ID is specified in the `Message` `struct`, it's
         // easier to extract it from the Image URL
@@ -419,4 +434,17 @@ pub mod run {
         // progress and showcase it's speed
         println!("Saved {}.{}!", name, ext);
     }
+
+    // This function allows for unrecoverable errors to be displayed to the user
+    // instead of quitting the program with no explanation
+    /*
+    fn error(message: &str) {
+        println!("{}", message);
+
+        let mut input = String::new();
+        stdin().read_line(&mut input).unwrap();
+
+        exit(0);
+    }
+    */
 }
