@@ -81,10 +81,21 @@ pub mod config {
 
     async fn get_channel(token: &str) -> String {
         loop {
-            let input = input(&[
+            let mut input = input(&[
                 "What channel are the images in?",
-                "Input the Channel ID, not its name.",
+                "Input the Channel ID or its link, not its name.",
             ]);
+
+            // If the input contains non-numerical characters and looks like a
+            // link to a channel, the tool will try to extract the Channel ID
+            // from it
+            if input.parse::<u64>().is_err() && input.contains("discord.com/channels/") {
+                input = input
+                    .split('/')
+                    .last()
+                    .expect("Failed to parse Discord Channel Link!")
+                    .to_string();
+            }
 
             // If the response's status is "OK", the Channel ID is valid and can
             // be accessed using the inputted Bot Token, and if it's not, the

@@ -39,6 +39,8 @@ Make sure not to share the bot's token with anyone you don't trust, as it can gi
 
 ### Channel ID
 
+*Update: The tool now supports channel links, so that you can paste a URL directly instead of finding the Channel ID.*
+
 As every element of the Discord app, every channel has a unique numerical ID known as a Snowflake, which can be found in two ways:
 
 - The most user-friendly way is to access Discord through a browser, go to the channel you want to download the images from, and check your URL, which should be formatted as follows:
