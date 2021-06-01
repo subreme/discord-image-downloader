@@ -1,30 +1,46 @@
 use chrono::prelude::*;
 
 pub mod config {
-    use super::*;
-
-    use reqwest::Response;
-    use std::{env::current_dir, fs, io};
+    use {
+        super::*,
+        reqwest::Response,
+        std::{env::current_dir, fs::create_dir_all, io},
+    };
 
     // This collects the config data, calling all config functions
     pub async fn all() -> Config {
-        let token = token().await;
+        let token = get_token().await;
+        let channel = get_channel(&token).await;
+
+        let mut date: u64 = 0;
+        let mut quantity: u32 = 0;
+        let mut path = default_path();
+
+        // The program won't ask the user to configure the remaining settings if
+        // the Default Settings were selected
+        if custom_settings() {
+            date = get_date();
+            quantity = get_quantity();
+            path = get_path();
+        }
+
         // The `Config` `struct` is defined at the end of the module
         Config {
-            // `token`'s value must be cloned as `Config.token` expects a
-            // `String`, but it needs to be borrowed by `channel()` later
-            token: token.to_owned(),
-            channel: channel(&token).await,
-            date: date(),
-            quantity: quantity(),
-            path: path(),
+            token,
+            channel,
+            date,
+            quantity,
+            path,
         }
     }
 
     // All config functions call this default one to run a specified prompt and
     // return the user's input, before interpreting it themselves
-    fn input(prompt: &str) -> String {
-        println!("\n{}\n", prompt);
+    fn input(prompt: &[&str]) -> String {
+        // `input()`'s prompt argument used to be a `&str`, however it was
+        // changed to an slice of `&str`s in order to make multiline prompts
+        // easier to read when called
+        println!("\n{}\n", prompt.join("\n"));
 
         let mut choice = String::new();
 
@@ -37,9 +53,9 @@ pub mod config {
         choice.trim().to_string()
     }
 
-    // This function allows `token()` and `channel()` to use Discord-s API to
+    // This function allows `get_token()` and `get_channel()` to use Discord-s API to
     // check if their value is valid
-    async fn api(token: &String, path: &str) -> Response {
+    async fn api(token: &str, path: &str) -> Response {
         reqwest::Client::new()
             .get(format!("https://discordapp.com/api/{}", path))
             .header("Authorization", format!("Bot {}", token))
@@ -48,9 +64,9 @@ pub mod config {
             .expect("Request Failed!")
     }
 
-    async fn token() -> String {
+    async fn get_token() -> String {
         loop {
-            let input = input("What's your bot's token?");
+            let input = input(&["What's your bot's token?"]);
 
             // If the response's status is "OK", the Bot Token is valid,
             // otherwise it's not, and the user is prompted again
@@ -63,9 +79,12 @@ pub mod config {
         }
     }
 
-    async fn channel(token: &String) -> String {
+    async fn get_channel(token: &str) -> String {
         loop {
-            let input = input("What channel are the images in?");
+            let input = input(&[
+                "What channel are the images in?",
+                "Input the Channel ID, not its name.",
+            ]);
 
             // If the response's status is "OK", the Channel ID is valid and can
             // be accessed using the inputted Bot Token, and if it's not, the
@@ -84,21 +103,51 @@ pub mod config {
         }
     }
 
+    // The only reason this function is asynchronous is that, for reasons I
+    // can't explain, the program would crash if I didn't
+    fn custom_settings() -> bool {
+        println!("\nAlthough the program allows for several customizations, most users use the default settings.\n");
+        println!("The default settings are:");
+        println!("- Download images of any age");
+        println!("- Save an unlimited amount of photos");
+        println!("- Store pictures in `./Discord Images`");
+
+        loop {
+            let input = input(&[
+                "Which settings do you want to use?",
+                "Write `Default`, `D`, or leave the line empty to use the tool's suggested settings.",
+                "Input `Custom` or `C` to edit the settings yourself."
+            ]).to_lowercase();
+
+            if input == "default" || input == "d" || input.is_empty() {
+                break false;
+            } else if input == "custom" || input == "c" {
+                break true;
+            } else {
+                println!("\nInvalid input!");
+                continue;
+            }
+        }
+    }
+
     // While I initially saved the Start Date as an instance of
     // `chrono::DateTime`, I opted for a Snowflake instead, this time saved as a
     // `u64`, so that I could compare its value to the IDs of the collected
     // messages to make sure that they were sent within the specified time range
-    fn date() -> u64 {
+    fn get_date() -> u64 {
         loop {
             // This is split in two lines as the standrd formatter (rustfmt)
             // doesn't like long lines
-            let input =
-                input("How far back should we search?\nLeave blank to download all images.");
+            let input = input(&[
+                "How far back should we search?",
+                "Leave blank to download all images.",
+            ])
+            .to_lowercase();
 
             // As dumb as it sounds, `Default` is a recognized value because I
             // liked how it looked in a screenshot of the program's interface I
             // sent a friend while writing it
-            if input.is_empty() || input.to_lowercase() == "default" {
+            if input == "default" || input.is_empty() {
                 // Zero is used to represent no limit, as Rust doesn't have
                 // `null` values and I thought that using `Option<u64>::None`
                 // was unnecessary
@@ -186,7 +235,7 @@ pub mod config {
                     // I might as well remove this check since it's already
                     // validated above
                     /*
-                    } else if date < Utc.yo(2015, 1).and_hms(0, 0, 0) {
+                    } else if date < Utc.yo(2015, 1).and_hms(0, 0, 0) {s
                         println!("Discord didn't even exist at the time!");
                         println!("If you want to include all messages, simply click `Enter`.");
                         continue;
@@ -203,21 +252,23 @@ pub mod config {
         }
     }
 
-    fn quantity() -> u32 {
+    fn get_quantity() -> u32 {
         loop {
-            // While I normally separate multiple-line messages into more than
+            // While I normally separate multiline messages into more than
             // one `println!()`, I thought it was simpler to only include one
             // `&str` as the `prompt` parameter rather than a tuple or vector
-            let input = input(
-                "How many images should be downloaded at most?\nLeave blank for an unlimited amount.",
-            );
+            let input = input(&[
+                "How many images should be downloaded at most?",
+                "Leave blank for an unlimited amount.",
+            ])
+            .to_lowercase();
 
             // The checks here are fairly similar to the previous ones and
             // rather self-explanatory
             match input.parse::<u32>() {
                 Ok(num) => break num,
                 Err(_) => {
-                    if input.is_empty() || input.to_lowercase() == "default" {
+                    if input == "default" || input.is_empty() {
                         break 0;
                     } else {
                         println!("\nInvalid input!");
@@ -232,28 +283,17 @@ pub mod config {
     // Returning `&'static Path`s gave me so many issues I ended up saving the
     // selected path as a `String`, since Rust lifetimes can be great but are
     // definitely a double-edged sword
-    fn path() -> String {
+    fn get_path() -> String {
         loop {
-            let input =
-                input("Where should the images be saved?\nLeave blank to use the default path.");
+            let input = input(&[
+                "Where should the images be saved?",
+                "Leave blank to use the default path.",
+            ]);
 
-            if input.is_empty() || input.to_lowercase() == "default" {
-                // This was the most obvious way to create a folder in the
-                // current directory, and I'll probably keep it this way as it
-                // works and I'm too dumb to figure out a more idiomatic method
-                let path = format!(
-                    "{}/Discord Images",
-                    current_dir()
-                        .expect("Failed to get current directory!")
-                        .to_str()
-                        .expect("Failed to get current directory!")
-                );
-
-                fs::create_dir_all(&path).expect("Failed to create directory!");
-
-                break path;
+            if input.to_lowercase() == "default" || input.is_empty() {
+                break default_path();
             } else {
-                match fs::create_dir_all(&input) {
+                match create_dir_all(&input) {
                     Ok(_) => break input,
                     Err(_) => {
                         println!("\nFailed to create directory!");
@@ -263,6 +303,23 @@ pub mod config {
                 }
             }
         }
+    }
+
+    fn default_path() -> String {
+        // This was the most obvious way to create a folder in the
+        // current directory, and I'll probably keep it this way as it
+        // works and I'm too dumb to figure out a more idiomatic method
+        let path = format!(
+            "{}/Discord Images",
+            current_dir()
+                .expect("Failed to get current directory!")
+                .to_str()
+                .expect("Failed to get current directory!")
+        );
+
+        create_dir_all(&path).expect("Failed to create directory!");
+
+        path
     }
 
     // The resoning behind the types used in the `struct` were all mentioned in
@@ -277,10 +334,11 @@ pub mod config {
 }
 
 pub mod run {
-    use super::*;
-
-    use serenity::model::channel::Message;
-    use std::{collections::HashMap, fs::write, /*io::stdin,*/ path::Path, /*process::exit*/};
+    use {
+        super::*,
+        serenity::model::channel::Message,
+        std::{collections::HashMap, fs::write, path::Path},
+    };
 
     // Jut like in the `config` module, the `all()` function calls its own
     // functions and handles the whole task. I could have simply written two
@@ -312,7 +370,7 @@ pub mod run {
             // serialize Discord's Message API JSON responses, I decided to simply
             // use the ones defined in the `serenity` crate, importing their
             // `Message` struct (and making me cry for wasting so much time)
-            let res: Vec<Message> = get(&selected, after);
+            let res: Vec<Message> = get(&selected, after).await;
 
             // Once all messages are requested, there will be no new ones and
             // the program will be done
@@ -335,11 +393,9 @@ pub mod run {
 
                     // The program only continues if the image limit hasn't been
                     // reached and the image hasn't been previously downloaded
-                    if images.len() > selected.quantity as usize
-                        || selected.quantity != 0 && images.contains_key(id.as_str())
+                    if images.len() < selected.quantity as usize
+                        || selected.quantity == 0 && !images.contains_key(id.as_str())
                     {
-                        break;
-                    } else {
                         // Not all messages have attatchments, but not all attatchments are
                         // images either, so each one must be checked
                         for att in msg.attachments {
@@ -367,16 +423,34 @@ pub mod run {
                                  */
                             }
                         }
+                    } else {
+                        break;
                     }
                 }
             }
         }
 
         // Once all images have been downloaded, the number found is dispayed
-        println!("\nSuccessfully saved {} images!", images.len());
+
+        // Conditional statements are used to customize the final message
+        if images.is_empty() {
+            println!(
+                "The channel doesn't contain any images{}!",
+                if selected.date == 0 {
+                    ""
+                } else {
+                    " in the selected time range"
+                }
+            );
+        } else {
+            println!(
+                "\nSuccessfully saved {} image{}!",
+                images.len(),
+                if images.len() == 1 { "" } else { "s" }
+            );
+        }
     }
 
-    #[tokio::main]
     async fn get(selected: &config::Config, after: u64) -> Vec<Message> {
         // The API is extremely simple, as shown below
         let mut url = format!(
