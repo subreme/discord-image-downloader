@@ -45,9 +45,18 @@ As every element of the Discord app, every channel has a unique numerical ID kno
 
 - The most user-friendly way is to access Discord through a browser, go to the channel you want to download the images from, and check your URL, which should be formatted as follows:
 
-```none
-https://discord.com/channels/@me/123456789012345678/246802468024680246
-                                                    ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+```text
+https://discord.com/channels/123456789012345678/246802468024680246
+                                                ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+```
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; *Note: Direct Message channels contain `@me/` after `channels/`.*
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Alternatively, if you right-click on a message and select "Copy Message Link", the Channel ID will be the following:
+ 
+```text
+https://discord.com/channels/123456789012345678/246802468024680246/369258147036925814
+                                                ------------------
 ```
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; The number following the final slash, underlined in the code block above, is your channel's ID.
